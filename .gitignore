@@ -1,0 +1,8 @@
+# IDE
+.vscode
+
+# IPython notebooks
+notebooks
+
+# Python
+*__pycache__
