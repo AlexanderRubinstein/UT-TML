@@ -6,9 +6,12 @@ import numpy as np
 from datetime import datetime
 import torch
 import random
+import matplotlib.pyplot as plt
 
 
 DEFAULT_HASH_SIZE = 10
+PLT_ROW_SIZE = 4
+PLT_COL_SIZE = 2
 
 
 def raise_unknown(param, value, location=""):
@@ -145,3 +148,66 @@ def deterministically_subsample_indices_uniformly(
         num_to_subsample,
         dtype=torch.int
     )
+
+
+def show_image(image):
+    image = image.squeeze()
+    plt.imshow(image, cmap=get_cmap(image))
+    plt.show(block=True)
+
+
+def get_cmap(image):
+    cmap = "viridis"
+    if len(image.shape) == 2:
+        cmap = "gray"
+    return cmap
+
+
+def show_images_batch(images_batch, labels_batch=None):
+    images_list = []
+    labels_list = None if labels_batch is None else []
+    n_images = images_batch.shape[0]
+    if labels_batch is not None:
+        assert labels_batch.shape[0] == n_images
+    for i in range(n_images):
+        images_list.append(images_batch[i].squeeze())
+        if labels_list is not None:
+            labels_list.append(labels_batch[i].item())
+    show_images(images_list, labels_list)
+
+
+def show_images(images, labels=None):
+
+    def remove_ticks_and_labels(subplot):
+        subplot.axes.xaxis.set_ticklabels([])
+        subplot.axes.yaxis.set_ticklabels([])
+        subplot.axes.xaxis.set_visible(False)
+        subplot.axes.yaxis.set_visible(False)
+
+    def get_row_cols(n):
+        n_rows = int(np.sqrt(n))
+        n_cols = int(n / n_rows)
+        if n % n_rows != 0:
+            n_cols += 1
+        return n_rows, n_cols
+
+    n = len(images)
+    assert n > 0
+    if labels is not None:
+        assert n == len(labels)
+
+    n_rows, n_cols = get_row_cols(n)
+
+    cmap = get_cmap(images[0])
+    fig = plt.figure(figsize=(n_rows * PLT_ROW_SIZE, n_cols * PLT_COL_SIZE))
+    for i in range(n):
+        subplot = fig.add_subplot(n_rows, n_cols, i + 1)
+        title = f'{i}'
+        if labels is not None:
+            title += f" of label \"{labels[i]}\""
+        subplot.title.set_text(title)
+        remove_ticks_and_labels(subplot)
+
+        subplot.imshow(images[i], cmap=cmap)
+
+    plt.show(block=True)
