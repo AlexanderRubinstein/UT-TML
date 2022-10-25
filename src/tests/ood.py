@@ -2,7 +2,8 @@ from tests.utils import test_wrapper
 import numpy as np
 
 
-MAX_STD_FOR_FREQ = 8
+# MAX_STD_FOR_FREQ = 8
+MAX_REL_STD_FOR_FREQ = 0.002
 
 
 @test_wrapper
@@ -25,14 +26,20 @@ def test_split(dsprites_holder):
     def assert_similar_frequencies(freqs, latents_sizes):
         for latent_id, latent_values in freqs.items():
             values_as_array = np.array(list(latent_values.values()))
+            mean = np.mean(values_as_array)
             std = np.std(values_as_array)
-            assert std < MAX_STD_FOR_FREQ
+            if float(std / mean) >= MAX_REL_STD_FOR_FREQ:
+                print("HERE")  # debug
+                print("std", std)
+                print(float(std / mean))
+            # assert std < MAX_STD_FOR_FREQ
+            assert float(std / mean) < MAX_REL_STD_FOR_FREQ
             assert len(values_as_array) == latents_sizes[latent_id]
 
     num_train_indices = len(dsprites_holder.indices["train"])
     num_test_indices = len(dsprites_holder.indices["test"])
 
-    assert num_train_indices + num_test_indices == dsprites_holder.imgs.shape[0]
+    assert num_train_indices + num_test_indices == dsprites_holder.total_num_images
     assert abs(
         num_train_indices / (num_train_indices + num_test_indices)
             - dsprites_holder.train_val_split

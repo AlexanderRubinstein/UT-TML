@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 DEFAULT_HASH_SIZE = 10
 PLT_ROW_SIZE = 4
-PLT_COL_SIZE = 2
+PLT_COL_SIZE = 4
 
 
 def raise_unknown(param, value, location=""):
@@ -114,8 +114,8 @@ def get_hash(input_object, hash_size=DEFAULT_HASH_SIZE):
     return h.hexdigest()
 
 
-def read_dsprites_npz(filename):
-    return np.load(filename, allow_pickle=True, encoding='latin1')
+# def read_dsprites_npz(filename):
+#     return np.load(filename, allow_pickle=True, encoding='latin1')
 
 
 def get_current_time():
@@ -150,33 +150,68 @@ def deterministically_subsample_indices_uniformly(
     )
 
 
-def show_image(image):
+def imshow(plot, image, cmap=None):
     image = image.squeeze()
-    plt.imshow(image, cmap=get_cmap(image))
+    num_image_dims = len(image.shape)
+    if cmap is None:
+        cmap = get_cmap(image)
+    assert num_image_dims >= 2 and num_image_dims <= 3
+    if num_image_dims == 3:
+        # image = image.transpose((1, 2, 0))
+        image = np.transpose(image, (1, 2, 0))
+    plot.imshow(image, cmap=cmap)
+
+def show_image(image):
+    # image = image.squeeze()
+    # plt.imshow(image, cmap=get_cmap(image))
+    imshow(plt, image)
     plt.show(block=True)
 
 
 def get_cmap(image):
     cmap = "viridis"
-    if len(image.shape) == 2:
+    squeezed_shape = image.squeeze().shape
+    if len(squeezed_shape) == 2:
         cmap = "gray"
     return cmap
 
 
-def show_images_batch(images_batch, labels_batch=None):
+def append_to_list_in_dict(d, key, element):
+    if key in d:
+        assert isinstance(d[key], list)
+        d[key].append(element)
+    else:
+        d[key] = [element]
+
+
+def show_images_batch(images_batch, label_batches=None):
     images_list = []
-    labels_list = None if labels_batch is None else []
+
+    images_batch = images_batch.cpu()
+
+    # labels_list = None if label_batches is None else []
+    label_lists = None if label_batches is None else {}
     n_images = images_batch.shape[0]
-    if labels_batch is not None:
-        assert labels_batch.shape[0] == n_images
+    if label_batches is not None:
+        if not isinstance(label_batches, dict):
+            label_batches = {"label": label_batches}
+        # for label_name, label_batch in label_batches.items():
+        for label_batch in label_batches.values():
+            assert label_batch.shape[0] == n_images
+            # label_lists[label_name] = []
     for i in range(n_images):
-        images_list.append(images_batch[i].squeeze())
-        if labels_list is not None:
-            labels_list.append(labels_batch[i].item())
-    show_images(images_list, labels_list)
+        # images_list.append(images_batch[i].squeeze())
+        images_list.append(images_batch[i])
+        if label_lists is not None:
+            # label_lists.append(labels_batch[i].item())
+            for label_name, label_batch in label_batches.items():
+                append_to_list_in_dict(label_lists, label_name, label_batch[i].item())
+    # show_images(images_list, labels_list)
+    show_images(images_list, label_lists)
 
 
-def show_images(images, labels=None):
+# def show_images(images, labels=None):
+def show_images(images, label_lists=None):
 
     def remove_ticks_and_labels(subplot):
         subplot.axes.xaxis.set_ticklabels([])
@@ -193,21 +228,120 @@ def show_images(images, labels=None):
 
     n = len(images)
     assert n > 0
-    if labels is not None:
-        assert n == len(labels)
+    if label_lists is not None:
+        # assert n == len(labels)
+        for label_list in label_lists.values():
+            assert len(label_list) == n
 
     n_rows, n_cols = get_row_cols(n)
 
     cmap = get_cmap(images[0])
-    fig = plt.figure(figsize=(n_rows * PLT_ROW_SIZE, n_cols * PLT_COL_SIZE))
+    fig = plt.figure(figsize=(n_cols * PLT_COL_SIZE, n_rows * PLT_ROW_SIZE))
     for i in range(n):
         subplot = fig.add_subplot(n_rows, n_cols, i + 1)
-        title = f'{i}'
-        if labels is not None:
-            title += f" of label \"{labels[i]}\""
+        title = f'n{i}'
+        if label_lists is not None:
+            for label_name, label_list in label_lists.items():
+                title += f"\n{label_name}=\"{label_list[i]}\""
         subplot.title.set_text(title)
         remove_ticks_and_labels(subplot)
 
-        subplot.imshow(images[i], cmap=cmap)
+        # subplot.imshow(images[i], cmap=cmap)
+        imshow(subplot, images[i], cmap=cmap)
+
+    plt.tight_layout()
+    plt.show(block=True)
+
+
+def append_dict(total_dict, current_dict):
+    """
+    Append leaves of possibly nested <current_dict>
+    to leaf lists of possibly nested <total_dict>
+    """
+
+    is_new_total_dict = False
+    if len(total_dict) == 0:
+        is_new_total_dict = True
+    for key, value in current_dict.items():
+        if isinstance(value, dict):
+            if is_new_total_dict:
+                sub_dict = {}
+                append_dict(sub_dict, value)
+                total_dict[key] = sub_dict
+            else:
+                assert key in total_dict
+                sub_dict = total_dict[key]
+                assert isinstance(sub_dict, dict)
+                append_dict(sub_dict, value)
+                total_dict[key] = sub_dict
+        else:
+            if is_new_total_dict:
+                total_dict[key] = [value]
+            else:
+                assert key in total_dict
+                assert isinstance(total_dict[key], list)
+                total_dict[key].append(value)
+
+
+def subsample_list_by_indices(input_list, num_to_subsample):
+    # subsampled_indices = utils.deterministically_subsample_indices_uniformly(
+    subsampled_indices = deterministically_subsample_indices_uniformly(
+        len(input_list),
+        num_to_subsample
+    ).numpy()
+    return np.array(input_list)[subsampled_indices].tolist()
+
+
+PLT_PLOT_HEIGHT = 5
+PLT_PLOT_WIDTH = 5
+
+
+def plot_stats(stats, title):
+
+    n = len(stats)
+    fig = plt.figure(figsize=(PLT_PLOT_WIDTH, n * PLT_PLOT_HEIGHT))
+
+    for i, (stat_name, stat_history) in enumerate(stats.items()):
+        subplot = fig.add_subplot(n, 1, i + 1)
+        title = f'{stat_name}'
+
+        subplot.title.set_text(title)
+
+        subplot.plot(stat_history)
 
     plt.show(block=True)
+
+
+def show_dataloader(dataloader, label_names):
+    images_batch, labels_batch = next(iter(dataloader))
+
+    images_batch = images_batch.cpu()
+    if isinstance(labels_batch, list):
+        for i in range(len(labels_batch)):
+            labels_batch[i] = labels_batch[i].cpu()
+    else:
+        labels_batch = labels_batch.cpu()
+
+    # if isinstance(labels_batch, list):
+    #     labels_batch = {
+    #         cue: label_batch for cue, label_batch in zip(label_names, labels_batch)
+    #     }
+    # else:
+    #     assert len(label_names) == 1
+    #     labels_batch = {label_names[0]: labels_batch}
+
+    labels_batch = make_named_labels_batch(label_names, labels_batch)
+
+    show_images_batch(images_batch, labels_batch)
+
+
+def make_named_labels_batch(label_names, labels_batch):
+    if isinstance(labels_batch, list):
+        labels_batch = {
+            cue: label_batch for cue, label_batch in zip(label_names, labels_batch)
+        }
+    else:
+        assert len(label_names) == 1
+        labels_batch = {label_names[0]: labels_batch}
+
+    return labels_batch
