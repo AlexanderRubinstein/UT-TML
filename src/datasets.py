@@ -224,8 +224,8 @@ class DatasetLabelledAccordingToCue:
 def make_dataset_labelled_according_to_cue(dataset_config):
     return DatasetLabelledAccordingToCue(
         dsprites_holder=prepare_dsprites_holder_maker(
-                **dataset_config["dsprites_holder_args"]
-            )(),
+            **dataset_config["dsprites_holder_args"]
+        )(),
         num_classes=dataset_config["num_classes"],
         cue=dataset_config["cue"],
         split=dataset_config["split"]
@@ -552,7 +552,8 @@ def make_dataset_with_diag_and_off_diag_cells_from_config(
         "one_cue_dataset",
         dataset_config,
         make_dataset_labelled_according_to_cue,
-        cache_path=cache_path
+        cache_path=cache_path,
+        nested_attr_to_search_in_gc=["dsprites_holder"]
     )
 
     dataset_config["cue"] = dataset_with_diag_and_off_diag_cells_config[
@@ -563,7 +564,8 @@ def make_dataset_with_diag_and_off_diag_cells_from_config(
         "one_cue_dataset",
         dataset_config,
         make_dataset_labelled_according_to_cue,
-        cache_path=cache_path
+        cache_path=cache_path,
+        nested_attr_to_search_in_gc=["dsprites_holder"]
     )
 
     return DatasetWithDiagAndOffDiagCells(
@@ -743,7 +745,8 @@ def get_diag_and_off_diag_dataloader(
         "diag_off_diag_dataset",
         dataset_with_diag_and_off_diag_cells_config,
         make_dataset_with_diag_and_off_diag_cells_from_config,
-        cache_path=cache_path
+        cache_path=cache_path,
+        nested_attr_to_search_in_gc=["dsprites_holder"]
     )
 
     return torch.utils.data.DataLoader(
@@ -803,7 +806,9 @@ def prepare_default_dsprites_dataloaders_maker(
             "default_dsprites_dataloaders",
             dataloaders_config,
             make_dataloaders_for_all_cues_from_config,
-            cache_path=cache_path
+            cache_path=cache_path,
+            nested_attr_to_search_in_gc\
+                =["dataset", "dataset", "dsprites_holder"]
         )
 
         if one_dataloader_to_select is not None:

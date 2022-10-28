@@ -6,6 +6,9 @@ import numpy as np
 import torch
 import random
 import matplotlib.pyplot as plt
+import gc
+from collections import UserDict
+import warnings
 
 
 DEFAULT_HASH_SIZE = 10
@@ -13,6 +16,9 @@ PLT_ROW_SIZE = 4
 PLT_COL_SIZE = 4
 PLT_PLOT_HEIGHT = 5
 PLT_PLOT_WIDTH = 5
+
+
+FINGERPRINT_ATTR = "_object_fingerprint_for_reading_from_cache"
 
 
 def raise_unknown(param, value, location=""):
@@ -38,8 +44,64 @@ def make_or_load_from_cache(
     save_func=default_save_func,
     load_func=default_load_func,
     cache_path=None,
-    forward_cache_path=False
+    forward_cache_path=False,
+    nested_attr_to_search_in_gc=None
 ):
+
+    def update_object_fingerprint_attr(result, object_fingerprint):
+
+        if isinstance(result, dict):
+            result = UserDict(result)
+
+        setattr(result, FINGERPRINT_ATTR, object_fingerprint)
+        return result
+
+    def object_with_possibly_reused_attribute_from_RAM(
+        obj,
+        obj_name,
+        nested_attr_to_search_in_gc
+    ):
+
+        assert has_nested_attr(obj, nested_attr_to_search_in_gc)
+
+        attr_obj_to_search_in_gc = get_nested_attr(
+            obj,
+            nested_attr_to_search_in_gc
+        )
+        assert hasattr(
+            attr_obj_to_search_in_gc,
+            FINGERPRINT_ATTR
+        )
+        attr_fingerprint = getattr(attr_obj_to_search_in_gc, FINGERPRINT_ATTR)
+        extracted_from_gc = extract_from_gc_by_attribute(
+            FINGERPRINT_ATTR,
+            attr_fingerprint
+        )
+        if len(extracted_from_gc) > 0:
+
+            set_nested_attr(obj, nested_attr_to_search_in_gc, extracted_from_gc[0])
+            print(
+                "For object {} reusing {} from RAM as \"{}\"".format(
+                    obj_name,
+                    attr_fingerprint,
+                    ".".join(nested_attr_to_search_in_gc)
+                )
+            )
+        return obj
+
+    object_fingerprint = "{}_{}".format(object_name, get_hash(object_config))
+
+    objects_with_the_same_fingerprint = extract_from_gc_by_attribute(
+        FINGERPRINT_ATTR,
+        object_fingerprint
+    )
+    if len(objects_with_the_same_fingerprint) > 0:
+        print(
+            "Reusing object from RAM with fingerprint {}".format(
+                object_fingerprint
+            )
+        )
+        return objects_with_the_same_fingerprint[0]
 
     if cache_path is None:
         cache_fullpath = None
@@ -47,12 +109,10 @@ def make_or_load_from_cache(
         os.makedirs(cache_path, exist_ok=True)
         cache_fullpath = os.path.join(
             cache_path,
-            "{}_{}.pkl".format(
-                object_name,
-                get_hash(object_config)
-            )
+            "{}.pkl".format(object_fingerprint)
         )
     if cache_fullpath and os.path.exists(cache_fullpath):
+
         print(
             "Loading cached {} from {}".format(
                 object_name,
@@ -60,6 +120,7 @@ def make_or_load_from_cache(
             )
         )
         result = load_func(cache_fullpath)
+
     else:
         if forward_cache_path:
             result = make_func(
@@ -79,6 +140,7 @@ def make_or_load_from_cache(
                         cache_fullpath
                     )
                 )
+
             except OSError as err:
                 print(
                     "Could not save cached {} to {}. "
@@ -88,7 +150,84 @@ def make_or_load_from_cache(
                         traceback.format_exc()
                     )
                 )
+
+    result = update_object_fingerprint_attr(result, object_fingerprint)
+
+    if nested_attr_to_search_in_gc is not None:
+
+        if has_nested_attr(result, nested_attr_to_search_in_gc):
+            result = object_with_possibly_reused_attribute_from_RAM(
+                result,
+                object_fingerprint,
+                nested_attr_to_search_in_gc
+            )
+
+        else:
+            assert isinstance(result, UserDict)
+            for key in result.keys():
+                result[key] = object_with_possibly_reused_attribute_from_RAM(
+                    result[key],
+                    key,
+                    nested_attr_to_search_in_gc
+                )
+
     return result
+
+
+def has_nested_attr(object, nested_attr):
+    assert len(nested_attr) > 0
+    if len(nested_attr) == 1:
+        return hasattr(object, nested_attr[0])
+    else:
+        return (
+            hasattr(object, nested_attr[0])
+                and has_nested_attr(
+                    getattr(object, nested_attr[0]),
+                    nested_attr[1:]
+                )
+        )
+
+
+def get_nested_attr(object, nested_attr):
+    assert len(nested_attr) > 0
+    if len(nested_attr) == 1:
+        return getattr(object, nested_attr[0])
+    else:
+        return (
+            get_nested_attr(getattr(object, nested_attr[0]), nested_attr[1:])
+        )
+
+
+def set_nested_attr(object, nested_attr, value):
+    assert len(nested_attr) > 0
+    if len(nested_attr) == 1:
+        return setattr(object, nested_attr[0], value)
+    else:
+        set_nested_attr(getattr(object, nested_attr[0]), nested_attr[1:], value)
+
+
+def extract_from_gc_by_attribute(attribute_name, attribute_value):
+
+    res = []
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        for obj in gc.get_objects():
+            has_attribute = False
+
+            try:
+                has_attribute = hasattr(obj, attribute_name)
+            except:
+                continue
+
+            if (
+                has_attribute
+                    and (getattr(obj, attribute_name) == attribute_value)
+            ):
+                res.append(obj)
+
+    return res
 
 
 def get_hash(input_object, hash_size=DEFAULT_HASH_SIZE):
