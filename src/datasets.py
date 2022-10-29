@@ -548,12 +548,18 @@ def make_dataset_with_diag_and_off_diag_cells_from_config(
         "split": dataset_with_diag_and_off_diag_cells_config["split"]
     }
 
+    save_func, load_func = get_save_load_funcs(
+        ["dsprites_holder"],
+        dataset_config["dsprites_holder_args"]
+    )
+
     easy_to_bias_cue_dataset = utils.make_or_load_from_cache(
         "one_cue_dataset",
         dataset_config,
         make_dataset_labelled_according_to_cue,
         cache_path=cache_path,
-        nested_attr_to_search_in_gc=["dsprites_holder"]
+        save_func=save_func,
+        load_func=load_func
     )
 
     dataset_config["cue"] = dataset_with_diag_and_off_diag_cells_config[
@@ -565,7 +571,8 @@ def make_dataset_with_diag_and_off_diag_cells_from_config(
         dataset_config,
         make_dataset_labelled_according_to_cue,
         cache_path=cache_path,
-        nested_attr_to_search_in_gc=["dsprites_holder"]
+        save_func=save_func,
+        load_func=load_func
     )
 
     return DatasetWithDiagAndOffDiagCells(
@@ -741,12 +748,18 @@ def get_diag_and_off_diag_dataloader(
         "shuffle": shuffle
     }
 
+    save_func, load_func = get_save_load_funcs(
+        ["dsprites_holder"],
+        dataset_with_diag_and_off_diag_cells_config["dsprites_holder_args"]
+    )
+
     diag_and_off_diag_dataset = utils.make_or_load_from_cache(
         "diag_off_diag_dataset",
         dataset_with_diag_and_off_diag_cells_config,
         make_dataset_with_diag_and_off_diag_cells_from_config,
         cache_path=cache_path,
-        nested_attr_to_search_in_gc=["dsprites_holder"]
+        save_func=save_func,
+        load_func=load_func
     )
 
     return torch.utils.data.DataLoader(
@@ -802,13 +815,18 @@ def prepare_default_dsprites_dataloaders_maker(
 
     def make_default_dsprites_dataloaders(model):
 
+        save_func, load_func = get_save_load_funcs(
+            ["dataset", "dataset", "dsprites_holder"],
+            dataloaders_config["dsprites_holder_args"]
+        )
+
         dataloaders = utils.make_or_load_from_cache(
             "default_dsprites_dataloaders",
             dataloaders_config,
             make_dataloaders_for_all_cues_from_config,
             cache_path=cache_path,
-            nested_attr_to_search_in_gc\
-                =["dataset", "dataset", "dsprites_holder"]
+            save_func=save_func,
+            load_func=load_func
         )
 
         if one_dataloader_to_select is not None:
@@ -875,3 +893,100 @@ def prepare_de_biasing_task_dataloader_maker(
         return diag_dataloader
 
     return make_debiasing_task_dataloader
+
+
+def set_attr_for_data_object(data_object, nested_data_holder_attr, value):
+    if utils.has_nested_attr(data_object, nested_data_holder_attr):
+        utils.set_nested_attr(data_object, nested_data_holder_attr, value)
+    else:
+        assert isinstance(data_object, dict)
+        assert len(data_object) > 0
+        for data_subobject in data_object.values():
+            assert utils.has_nested_attr(
+                data_subobject,
+                nested_data_holder_attr
+            )
+            utils.set_nested_attr(
+                data_subobject,
+                nested_data_holder_attr,
+                value
+            )
+
+
+def get_attr_from_data_object(data_object, nested_data_holder_attr):
+    if utils.has_nested_attr(data_object, nested_data_holder_attr):
+        return utils.get_nested_attr(data_object, nested_data_holder_attr)
+    else:
+        res = None
+        assert isinstance(data_object, dict)
+        assert len(data_object) > 0
+        for data_subobject in data_object.values():
+            assert utils.has_nested_attr(
+                data_subobject,
+                nested_data_holder_attr
+            )
+            if res is None:
+                res = utils.get_nested_attr(
+                    data_subobject,
+                    nested_data_holder_attr
+                )
+            else:
+                assert (
+                    res is utils.get_nested_attr(
+                        data_subobject,
+                        nested_data_holder_attr
+                    )
+                )
+        assert res is not None
+        return res
+
+
+def prepare_object_without_data_holder_saver(nested_data_holder_attr):
+
+    def save_data(data_object, path):
+        data_holder = get_attr_from_data_object(
+            data_object,
+            nested_data_holder_attr
+        )
+        set_attr_for_data_object(data_object, nested_data_holder_attr, None)
+        utils.default_save_func(data_object, path)
+        set_attr_for_data_object(
+            data_object,
+            nested_data_holder_attr,
+            data_holder
+        )
+
+    return save_data
+
+
+def prepare_object_without_data_holder_loader(
+    nested_data_holder_attr,
+    make_data_holder
+):
+
+	data_holder = make_data_holder()
+
+	def load_data(path):
+		data_object = utils.default_load_func(path)
+		set_attr_for_data_object(
+            data_object,
+            nested_data_holder_attr,
+            data_holder
+        )
+		return data_object
+
+	return load_data
+
+
+def get_save_load_funcs(nested_dsprites_holder_attr, dsprites_holder_args):
+
+    save_func = prepare_object_without_data_holder_saver(
+        nested_dsprites_holder_attr
+    )
+    load_func = prepare_object_without_data_holder_loader(
+        nested_dsprites_holder_attr,
+        prepare_dsprites_holder_maker(
+            **dsprites_holder_args
+        )
+    )
+    return save_func, load_func

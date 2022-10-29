@@ -44,8 +44,7 @@ def make_or_load_from_cache(
     save_func=default_save_func,
     load_func=default_load_func,
     cache_path=None,
-    forward_cache_path=False,
-    nested_attr_to_search_in_gc=None
+    forward_cache_path=False
 ):
 
     def update_object_fingerprint_attr(result, object_fingerprint):
@@ -56,38 +55,6 @@ def make_or_load_from_cache(
         setattr(result, FINGERPRINT_ATTR, object_fingerprint)
         return result
 
-    def object_with_possibly_reused_attribute_from_RAM(
-        obj,
-        obj_name,
-        nested_attr_to_search_in_gc
-    ):
-
-        assert has_nested_attr(obj, nested_attr_to_search_in_gc)
-
-        attr_obj_to_search_in_gc = get_nested_attr(
-            obj,
-            nested_attr_to_search_in_gc
-        )
-        assert hasattr(
-            attr_obj_to_search_in_gc,
-            FINGERPRINT_ATTR
-        )
-        attr_fingerprint = getattr(attr_obj_to_search_in_gc, FINGERPRINT_ATTR)
-        extracted_from_gc = extract_from_gc_by_attribute(
-            FINGERPRINT_ATTR,
-            attr_fingerprint
-        )
-        if len(extracted_from_gc) > 0:
-
-            set_nested_attr(obj, nested_attr_to_search_in_gc, extracted_from_gc[0])
-            print(
-                "For object {} reusing {} from RAM as \"{}\"".format(
-                    obj_name,
-                    attr_fingerprint,
-                    ".".join(nested_attr_to_search_in_gc)
-                )
-            )
-        return obj
 
     object_fingerprint = "{}_{}".format(object_name, get_hash(object_config))
 
@@ -153,23 +120,6 @@ def make_or_load_from_cache(
 
     result = update_object_fingerprint_attr(result, object_fingerprint)
 
-    if nested_attr_to_search_in_gc is not None:
-
-        if has_nested_attr(result, nested_attr_to_search_in_gc):
-            result = object_with_possibly_reused_attribute_from_RAM(
-                result,
-                object_fingerprint,
-                nested_attr_to_search_in_gc
-            )
-
-        else:
-            assert isinstance(result, UserDict)
-            for key in result.keys():
-                result[key] = object_with_possibly_reused_attribute_from_RAM(
-                    result[key],
-                    key,
-                    nested_attr_to_search_in_gc
-                )
 
     return result
 
