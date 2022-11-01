@@ -822,7 +822,7 @@ def prepare_dsprites_holder_maker(
 
 
 def prepare_default_dsprites_dataloaders_maker(
-    dsprites_holder_args: dict[str, Any] \
+    dsprites_holder_args: Dict[str, Any] \
         = DEFAULT_DSPRITES_HOLDER_ARGS,
     num_classes: int = NUM_CLASSES,
     batch_size: int = BATCH_SIZE,
@@ -964,7 +964,7 @@ def prepare_default_dsprites_dataloaders_maker(
 
 
 def prepare_de_biasing_task_dataloader_maker(
-    dsprites_holder_args: dict[str, Any] \
+    dsprites_holder_args: Dict[str, Any] \
         = DEFAULT_DSPRITES_HOLDER_ARGS,
     num_classes: int = NUM_CLASSES,
     batch_size: int = BATCH_SIZE,
