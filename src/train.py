@@ -4,6 +4,12 @@ import numpy as np
 import torch.optim as optim
 from torchmetrics import Accuracy
 from IPython.display import clear_output
+from typing import (
+    Dict,
+    List,
+    Callable,
+    Tuple
+)
 
 
 # local modules
@@ -33,17 +39,61 @@ DECAY_PARAM = 0.9
 
 
 def run_epoch(
-    model,
-    dataloader,
-    is_train,
-    compute_metric,
-    msg_prefix,
-    device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
-    optimizer=None,
-    criterion=None,
-    do_train_func=None,
-    show_random_batch_with_predictions=False
-):
+    model: torch.nn.Module,
+    dataloader: torch.utils.data.DataLoader,
+    is_train: bool,
+    compute_metric: Callable,
+    msg_prefix: str,
+    device: torch.device = torch.device(
+        "cuda:0" if torch.cuda.is_available() else "cpu"
+    ),
+    optimizer: object = None,
+    criterion: Callable = None,
+    do_train_func: Callable = None,
+    show_random_batch_with_predictions: bool = False
+) -> None:
+    """
+    Dataloader's inputs are forwarded through the model to get predictions.
+    Then dataloader's labels are used for metrics computation.
+    If the mode is "train" then in addition to that by using <do_train_func>
+    losses are computed and logged and model weights are updated.
+
+    Args:
+
+        model (torch.nn.Module): a model which predictions for the inputs
+            are computed and weights are updated if <is_train> is True.
+
+        dataloader (torch.utils.data.DataLoader): a dataloader
+            which generates inputs and labels.
+
+        is_train (bool): a flag, if it is True, then the mode is "train",
+            otherwise the mode is "eval".
+
+        compute_metric (Callable): a function to compute metrics
+            using <model>'s predictions and labels.
+
+        msg_prefix (str): a message prefix to write before logs in the stdout.
+
+        device (torch.device): a device to forward model
+            and compute metrics and losses on.
+            Default: torch.device(
+                "cuda:0" if torch.cuda.is_available() else "cpu"
+            )
+
+        optimizer, criterion: args for the <do_train_func>
+            (same as for local function "do_default_train_func").
+            Default: None for all
+
+        do_train_func (Callable): a function that defines
+            how to accumulate loss gradients w.r.t. model weights
+            and make optimizer steps if <is_train> is True.
+            Default: None
+
+        show_random_batch_with_predictions (bool): a flag, if it is True
+            random batch from the <dataloader> will be shown
+            using local function "utils.show_images_batch".
+            Default: False
+    """
 
     def make_epoch_stats(epoch_histories):
         epoch_stats = {}
@@ -116,6 +166,10 @@ def run_epoch(
 
         if is_train:
 
+            assert do_train_func
+            assert criterion
+            assert optimizer
+
             pred_batch, epoch_histories = do_train_func(
                 model,
                 criterion,
@@ -178,19 +232,70 @@ def run_epoch(
 
 
 def train_eval_loop(
-    model,
-    train_dataloader,
-    val_dataloaders,
-    n_epochs,
-    make_metric,
-    make_criterion,
-    make_optimizer,
-    make_scheduler,
-    do_train_func,
-    random_seed=RANDOM_SEED,
-    stop_after_epoch=None,
-    clear_output_func=clear_output
-):
+    model: torch.nn.Module,
+    train_dataloader: torch.utils.data.DataLoader,
+    val_dataloaders: Dict[str, torch.utils.data.DataLoader],
+    n_epochs: int,
+    make_metric: Callable,
+    make_criterion: Callable,
+    make_optimizer: Callable,
+    make_scheduler: Callable,
+    do_train_func: Callable,
+    random_seed: int = RANDOM_SEED,
+    stop_after_epoch: int = None,
+    clear_output_func: Callable = clear_output
+) -> None:
+    """
+    Run a train and eval loop for a model and print values
+    and plot graphs for metrics and losses.
+    Within one loop iteration (aka epoch) local function "run_epoch"
+    is called for the model on train_dataloader in a "train" mode
+    and on each of val_dataloaders in an "eval" mode.
+
+    Args:
+
+        model (torch.nn.Module): a model to train on <train_dataloader>
+            and eval on <val_dataloaders>.
+
+        train_dataloader (torch.utils.data.DataLoader): a dataloader to train
+            the <model> on.
+
+        val_dataloaders (Dict[str, torch.utils.data.DataLoader]): a dictionary
+            that maps validation dataloader name
+            to the validation dataloader to eval the <model> on.
+
+        n_epochs (int): number of iterations in the train and eval loop.
+
+        make_metric (Callable): a factory function used for making metrics.
+
+        make_criterion (Callable): a factory function
+            used for making a criterion aka loss.
+
+        make_optimizer (Callable): a factory function
+            used for making an optimizer of the <model> weights.
+
+        make_scheduler (Callable): a factory function
+            used for making a scheduler for the <optimizer>'s learning rate.
+
+        do_train_func (Callable): arg for local function "run_epoch".
+
+        random_seed (int): a random seed
+            used to init random number generator.
+            Default: RANDOM_SEED
+
+        stop_after_epoch (int): the number of the iteration
+            after which the loop should be forced to stop.
+            Useful when changing <n_epochs> affects some other parameters
+            and should be fixed but the loop needs to be stopped
+            after a certain step smaller than <n_epochs>.
+            If it is None, this argument is ignored.
+            Default: None
+
+        clear_output_func (Callable): a function used for clearing output.
+            Useful for IPython notebook.
+            Default: IPython.display.clear_output
+    """
+
 
     def log_stats(stats_history, msg_prefix, plots_name):
         print(LOG_SEPARATOR, flush=True)
@@ -281,11 +386,29 @@ def train_eval_loop(
 
 
 def eval_model_on_test(
-    model,
-    test_dataloaders,
-    make_metric,
-    show_random_batch_with_predictions=True
-):
+    model: torch.nn.Module,
+    test_dataloaders: Dict[str, torch.utils.data.DataLoader],
+    make_metric: Callable,
+    show_random_batch_with_predictions: bool = True
+) -> None:
+    """
+    Evaluate a model on given dataloaders, i.e. call local "run_epoch" function
+    for the model on each of test dataloaders in an "eval" mode.
+
+    Args:
+
+        model (torch.nn.Module): a model to eval on <test_dataloaders>.
+
+        test_dataloaders (Dict[str, torch.utils.data.DataLoader]): a dictionary
+            that maps names of dataloaders on which the <model> is evaluated
+            to that very dataloaders .
+
+        make_metric (Callable): a factory function for making metrics.
+
+        show_random_batch_with_predictions: arg
+            for the local function "run_epoch".
+            Default: True
+    """
     compute_metric = make_metric()
     for test_dataloader_name, test_dataloader in test_dataloaders.items():
         msg_prefix = f"Test on {test_dataloader_name}"
@@ -350,14 +473,50 @@ def prepare_exp_scheduler_maker(gamma=DECAY_PARAM):
 
 
 def do_default_train_func(
-    model,
-    criterion,
-    optimizer,
-    images_batch,
-    labels_batch,
-    second_labels_batch,
-    epoch_histories
-):
+    model: torch.nn.Module,
+    criterion: Callable,
+    optimizer: object,
+    images_batch: torch.tensor,
+    labels_batch: torch.tensor,
+    second_labels_batch: torch.tensor,
+    epoch_histories: Dict[str, List[float]]
+) -> Tuple[torch.tensor, Dict[str, List[float]]]:
+
+    """
+    <do_train_func> for local function "run_epoch" in a standard scenario.
+
+    Args:
+
+        model (torch.nn.Module): a model which weights should be updated.
+
+        criterion (Callable): a function that computes loss.
+
+        optimizer (optimizer class): an optimizer that will update
+            the <model>'s weights using gradients of the <criterion>.
+
+        images_batch (torch.tensor): a batch of image inputs to the model.
+
+        labels_batch (torch.tensor): a batch of labels for the <images_batch>.
+
+        second_labels_batch (torch.tensor): a batch of additional labels
+            for the <images_batch>, makes sense only for special types
+            of losses.
+
+        epoch_histories (Dict[str, List[float]]): a dictionary
+            that maps metrics and losses names
+            to their values throughout different epochs.
+
+    Returns:
+
+        a tuple of
+
+            pred_batch (torch.tensor): predictions made by the model
+                for the <images_batch>.
+
+            epoch_histories (Dict[str, List[float]]): same as in the Args,
+                but with new metrics and losses values
+                appened to the corresponding lists.
+    """
 
     pred_batch = model(images_batch)
 

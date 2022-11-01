@@ -9,6 +9,13 @@ import matplotlib.pyplot as plt
 import gc
 from collections import UserDict
 import warnings
+from typing import (
+    Union,
+    Dict,
+    List,
+    Any,
+    Callable
+)
 
 
 DEFAULT_HASH_SIZE = 10
@@ -38,14 +45,51 @@ def default_load_func(path):
 
 
 def make_or_load_from_cache(
-    object_name,
-    object_config,
-    make_func,
-    save_func=default_save_func,
-    load_func=default_load_func,
-    cache_path=None,
-    forward_cache_path=False
+    object_name: str,
+    object_config: Dict[str, Any],
+    make_func: Callable,
+    save_func: Callable = default_save_func,
+    load_func: Callable = default_load_func,
+    cache_path: str = None,
+    forward_cache_path: bool = False
 ):
+    """
+    Make a resulting object or load it from cache (either in RAM or filesystem)
+    if it has been created and saved by this function before.
+
+    Args:
+
+        object_name (str): a name of the object to make or load from cache;
+            used for making its unique cache name.
+
+        object_config (Dict[str, Any]): a config used by the <make_func>;
+            its hash also used to make the resulting object's unique cache name.
+
+        make_func (Callable): an object factory that makes resulting object
+            in case it is not found in cache.
+            Uses <object_config> and optionally <cache_path>,
+            if <forward_cache_path> is True, as arguments.
+
+        save_func (Callable): a function used to save object in the filesystem.
+            Default: default_save_func
+
+        load_func (Callable): a function used to load resulting object
+            from the cache in the filesystem.
+            Default: default_load_func
+
+        cache_path (str): a path for saving cache in the filesystem.
+            If is None, cache is not saved in the filesystem.
+            Default: None
+
+        forward_cache_path (bool): a flag, if it is True,
+            <cache_path> is forwarded as an argument to the <make_func>.
+            Default: False
+
+    Returns:
+
+        result (Any): the resulting object.
+    """
+
 
     def update_object_fingerprint_attr(result, object_fingerprint):
 
@@ -246,7 +290,24 @@ def append_to_list_in_dict(d, key, element):
         d[key] = [element]
 
 
-def show_images_batch(images_batch, label_batches=None):
+def show_images_batch(
+    images_batch: torch.tensor,
+    label_batches: Union[torch.tensor, Dict[str, torch.tensor]] = None
+):
+    """
+    Shows a batch of images as a square image grid.
+    If <label_batches> is provided, each image title consists of label names
+    and their corresponding values.
+
+    Args:
+
+        images_batch (torch.tensor): of images batch.
+
+        label_batches (Union[torch.tensor, Dict[str, torch.tensor]], optional):
+            information about labels that is either a label batch
+            or a dict that maps label name to the corresponding label batch.
+    """
+
 
     images_list = []
 
@@ -375,7 +436,24 @@ def plot_stats(stats, title):
     plt.show()
 
 
-def show_dataloader_first_batch(dataloader, label_names):
+def show_dataloader_first_batch(
+    dataloader: torch.utils.data.DataLoader,
+    label_names: List[str]
+):
+    """
+	Plots first batch of a dataloader
+    using local function "show_images_batch".
+
+	Args:
+
+		dataloader (torch.utils.data.DataLoader): a dataloader
+            which first batch is shown.
+
+		label_names (List[str]): list of names for each label.
+			For example, if a dataloader generates
+            tuple (input, List[label_0, ... label_k]),
+			label_names will be List[label_0_name, ..., label_k_name].
+    """
 
     images_batch, labels_batch = next(iter(dataloader))
 
