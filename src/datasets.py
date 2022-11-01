@@ -1,6 +1,12 @@
 import numpy as np
 import torch
 import random
+from typing import (
+    Dict,
+    Callable,
+    Union,
+    Any
+)
 
 
 # local modules
@@ -31,7 +37,31 @@ DEFAULT_DSPRITES_HOLDER_ARGS = {
 
 
 class DSpritesHolder:
-    def __init__(self, train_val_split, colored=False):
+    """
+    An object that stores images and their factor (aka cue) values
+    from the dSprites dataset; each sample belongs to only one
+    of two disjoint splits {"train", "test"}
+    """
+    def __init__(
+        self,
+        train_val_split: float,
+        colored: bool
+    ):
+        """
+        Creates a DSpritesHolder object
+
+        Args:
+
+            train_val_split (float): proportion of samples that
+                will belong to the "train" split.
+                As a consequence, (1 - train_val_split) is the proportion
+                of samples that will belong to the "test" split.
+
+            colored (bool): flag, if it is True, images will be colored.
+                When images are not colored they do not have color channel,
+                i.e. len(image.shape) == 2 for non-colored images
+                and (len(image.shape) == 3 and image.shape[0] == 3) for colored.
+        """
 
         dsprites_zip = read_dsprites_npz(DSPRITES_NPZ_PATH)
         self.imgs = dsprites_zip['imgs']
@@ -792,16 +822,108 @@ def prepare_dsprites_holder_maker(
 
 
 def prepare_default_dsprites_dataloaders_maker(
-    dsprites_holder_args=DEFAULT_DSPRITES_HOLDER_ARGS,
-    num_classes=NUM_CLASSES,
-    batch_size=BATCH_SIZE,
-    is_multilabel=False,
-    cache_path=CACHE_PATH,
-    split="train",
-    shuffle=True,
-    dataset_size=TRAIN_DATASET_SIZE,
-    one_dataloader_to_select=None
-):
+    dsprites_holder_args: dict[str, Any] \
+        = DEFAULT_DSPRITES_HOLDER_ARGS,
+    num_classes: int = NUM_CLASSES,
+    batch_size: int = BATCH_SIZE,
+    is_multilabel: bool = False,
+    cache_path: str = CACHE_PATH,
+    split: str = "train",
+    shuffle: bool = True,
+    dataset_size: int = TRAIN_DATASET_SIZE,
+    one_dataloader_to_select: str = None
+) -> Callable:
+    """
+    Prepare a factory function for creating default dsprites dataloaders
+    by optionally caching them.
+
+    Where default dsprites dataloader is the one
+    that generates tuples of input image from the dSprites dataset
+    and it's labels.
+
+    If <is_multilabel> is True, then (each) dataloader
+    will have an attribute "cue_names" which will store
+    the correctly ordered names of cues for which the labels are given.
+
+    Args:
+
+        dsprites_holder_args (dict[str, Any]): keyword args
+            for local class method "DSpritesHolder.__init__()"
+            and cache_path keyword arg that does the same as <cache_path>
+            for the current function.
+            Default: DEFAULT_DSPRITES_HOLDER_ARGS
+
+        num_classes (int): number of classes into which to distribute
+            all possible values of each cue.
+
+            For example if cue "scale" has 6 values
+            {scale_0, scale_1, scale_2, scale_3, scale_4, scale_5},
+            then if <num_classes> equals to 3,
+            image classes will be assigned in the following way:
+                class 0: (scale == scale_0 or scale == scale_1)
+                class 1: (scale == scale_2 or scale == scale_3)
+                class 2: (scale == scale_4 or scale == scale_5).
+
+            When the number of cue values (n_values) is not divisible
+            by the <n_classes>, each class gets (n_values / <n_classes>) values
+            and first (n_values % <n_classes>) classes get one additional value.
+            Where / means an integer division and % means a remainder
+            from the integer division.
+            By "class gets k values" we mean that to assign an image
+            to this class, its cue value needs to be equal to one of k
+            different corresponding cue values distributed to this class.
+            Default: NUM_CLASSES
+
+        batch_size (int): batch size for (each) created dataloader.
+            Default: BATCH_SIZE
+
+        is_multilabel (bool): a flag, if it is True then one dataloader
+            is created for all cues.
+            It will generate an input image batch and a list of labels batches
+            for each cue in the order specified
+            by this dataloader's "cue_names" attribute.
+            If it is False, then a separate dataloader is created for each cue.
+            Each of these dataloaders will generate an input image batch
+            and one labels batch according to the corresponding cue.
+            Default: False
+
+        cache_path (str): arg for local function "utils.make_or_load_from_cache"
+            used for making the dataloader.
+            Default: CACHE_PATH
+
+        split (str): a split name for samples
+            (splits are defined in local class "DSpritesHolder").
+            Default: "train"
+
+        shuffle (bool): a flag, if it is True samples will be shuffled.
+            Default: True
+
+        dataset_size (int): number of samples used by (each) created dataloader.
+            Default: TRAIN_DATASET_SIZE
+
+        one_dataloader_to_select (str): a name of the only dataloader
+            to return (possible names are cue names if <is_multilabel> is False
+            or "all_cues" otherwise).
+            If it is None, then this argument is ignored.
+            Default: None
+
+    Returns:
+
+        a factory function that takes model as an argument
+        (needed for compatibility with adversarial dataloaders)
+        and creates dataloaders in one of the following formats:
+
+            - torch.utils.data.DataLoader: the only one returned dataloader
+                if <one_dataloader_to_select> is not None.
+
+            - Dict[str, torch.utils.data.DataLoader]: a dictionary
+                that maps cue name to the dataloader with corresponding labels
+                if <one_dataloader_to_select> is None.
+
+                If <is_multilabel> is True
+                and <one_dataloader_to_select> is None
+                then the only key in the returned dictionary will be "all_cues".
+    """
 
     dataloaders_config = {
         "dsprites_holder_args": dsprites_holder_args,
@@ -813,7 +935,10 @@ def prepare_default_dsprites_dataloaders_maker(
         "dataset_size": dataset_size
     }
 
-    def make_default_dsprites_dataloaders(model):
+    def make_default_dsprites_dataloaders(model) \
+        -> Union[
+            torch.utils.data.DataLoader, Dict[str, torch.utils.data.DataLoader]
+        ]:
 
         save_func, load_func = get_save_load_funcs(
             ["dataset", "dataset", "dsprites_holder"],
@@ -839,22 +964,124 @@ def prepare_default_dsprites_dataloaders_maker(
 
 
 def prepare_de_biasing_task_dataloader_maker(
-    dsprites_holder_args=DEFAULT_DSPRITES_HOLDER_ARGS,
-    num_classes=NUM_CLASSES,
-    batch_size=BATCH_SIZE,
-    easy_to_bias_cue=EASY_TO_BIAS_CUE,
-    ground_truth_cue=GROUND_TRUTH_CUE,
-    off_diag_proportion=0,
-    off_diag_multiplier=None,
-    unlabelled_off_diag=False,
-    equal_diag_off_diag_in_batch=False,
-    cache_path=CACHE_PATH,
-    split="train",
-    shuffle=True,
-    dataset_size=TRAIN_DATASET_SIZE
-):
+    dsprites_holder_args: dict[str, Any] \
+        = DEFAULT_DSPRITES_HOLDER_ARGS,
+    num_classes: int = NUM_CLASSES,
+    batch_size: int = BATCH_SIZE,
+    easy_to_bias_cue: str = EASY_TO_BIAS_CUE,
+    ground_truth_cue: str = GROUND_TRUTH_CUE,
+    off_diag_proportion: float = 0,
+    off_diag_multiplier: int = None,
+    unlabelled_off_diag: bool = False,
+    equal_diag_off_diag_in_batch: bool = False,
+    cache_path: str = CACHE_PATH,
+    split: str = "train",
+    shuffle: bool = True,
+    dataset_size: int = TRAIN_DATASET_SIZE,
+) -> Callable:
+    """
+    Prepare a factory function for creating dataloaders for the de-biasing task
+    by optionally caching them.
 
-    def make_debiasing_task_dataloader(model):
+    It will create two types of dataloaders: "diag_and_off_diag_dataloader"
+    and "default_dataloader":
+
+        - "default_dataloader" is the one created by the factory function
+        prepared in local function "prepare_default_dsprites_dataloaders_maker".
+
+        - "diag_and_off_diag_dataloader" is the one that generates tuples of:
+            - images
+            - "ground truth" labels
+            - "easy to bias" labels.
+
+        Where the "ground truth" labels are the correct labels
+        that are assigned according to the cue
+        which model is trained to distinguish;
+        "easy to bias" labels are the labels that are assigned to the cue
+        which model easily gets biased to.
+
+        Samples for which "ground truth" labels coincide
+        with "easy to bias" labels are called "diagonal" samples,
+        otherwise samples are called "off-diagonal".
+
+    Args:
+
+        dsprites_holder_args, num_classes, batch_size, cache_path,
+        split, shuffle, dataset_size:
+            same as in local function
+            "prepare_default_dsprites_dataloaders_maker".
+            Defaults are also the same as in that function.
+
+        easy_to_bias_cue (str): name of the cue
+            according to which "easy to bias" labels are assigned.
+            Default: EASY_TO_BIAS_CUE
+
+        ground_truth_cue (str): name of the cue
+            according to which "ground truth" labels are assigned.
+            Default: GROUND_TRUTH_CUE
+
+        off_diag_proportion (float): a ratio: the number of "off-diagonal"
+            divided by the number of "diagonal" samples.
+            Default: 0
+
+        off_diag_multiplier (int): a number of duplicates
+            each "off-diagonal" sample will have to artificially increase
+            their number in each batch. If None, no duplicates are added.
+            Default: None
+
+        unlabelled_off_diag (bool): a flag, if it is True,
+            "off-diagonal" samples have ground truth labels,
+            otherwise their labels equal to the EMPTY_LABEL.
+            Default: True
+
+        equal_diag_off_diag_in_batch (bool): a flag if it is True,
+            the number of "diagonal" samples in a batch is the same as
+            the number of "off-diagonal" samples in a batch,
+            otherwise, these numbers might not be the same.
+
+            If it is True, then the following should hold:
+            (
+                <off_diag_proportion> == 1.0
+                    or (<off_diag_proportion> * <off_diag_multiplier>) == 1.0
+            ).
+            Default: False
+
+    Returns:
+
+        a factory function that takes model as an argument
+        (needed for compatibility with adversarial dataloaders)
+        and creates dataloaders in one of the following formats:
+
+            - "diag_and_off_diag_dataloader", if <split> is "train".
+
+            - Dict[
+                str, Union["diag_and_off_diag_dataloader", "default_dataloader"]
+            ] with the following contents:
+
+                - "test_name": "diag_and_off_diag_dataloader"
+
+                - <ground_truth_cue>: "default_dataloader",
+
+                if <split> is "test".
+
+                Where "test_name" is
+                "diag+(off_diag_proportion=<off_diag_proportion>)"
+                if <off_diag_proportion> > 0 and just "diag" otherwise.
+
+            Where "diag_and_off_diag_dataloader" and "default_dataloader"
+            are both of torch.utils.data.DataLoader type.
+
+            "default_dataloader" is created
+            using "prepare_default_dsprites_dataloaders_maker"
+            by forwarding arguments from this function
+            and setting unique additional argument <one_dataloader_to_select>
+            of the former equal to the <ground_truth_cue>.
+    """
+
+    def make_debiasing_task_dataloader(model) \
+        -> Union[
+            torch.utils.data.DataLoader, Dict[str, torch.utils.data.DataLoader]
+        ]:
 
         diag_dataloader = get_diag_and_off_diag_dataloader(
             dsprites_holder_args=dsprites_holder_args,
