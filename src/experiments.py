@@ -34,7 +34,7 @@ def generic_experiment(
 
     Args:
 
-        n_epochs (int): an arg for local function "train.train_eval_loop".
+        n_epochs (int): an argument for local function "train.train_eval_loop".
 
         make_train_dataloader (Callable): a factory function
             used to make a train_dataloader.
@@ -49,8 +49,9 @@ def generic_experiment(
             used to make a model.
 
         make_metric, make_criterion, make_optimizer,
-            make_scheduler, do_train_func, random_seed,
-            stop_after_epoch: args for local function "train.train_eval_loop"
+        make_scheduler, do_train_func, random_seed,
+        stop_after_epoch: arguments
+            for local function "train.train_eval_loop"
 
     Returns:
 

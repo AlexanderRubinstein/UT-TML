@@ -54,7 +54,8 @@ def run_epoch(
 ) -> None:
     """
     Dataloader's inputs are forwarded through the model to get predictions.
-    Then dataloader's labels are used for metrics computation.
+    Then this predictions and dataloader's labels
+    are used for metrics computation.
     If the mode is "train" then in addition to that by using <do_train_func>
     losses are computed and logged and model weights are updated.
 
@@ -80,7 +81,7 @@ def run_epoch(
                 "cuda:0" if torch.cuda.is_available() else "cpu"
             )
 
-        optimizer, criterion: args for the <do_train_func>
+        optimizer, criterion: arguments for the <do_train_func>
             (same as for local function "do_default_train_func").
             Default: None for all
 
@@ -252,6 +253,23 @@ def train_eval_loop(
     is called for the model on train_dataloader in a "train" mode
     and on each of val_dataloaders in an "eval" mode.
 
+    How does statistics logging happen:
+
+        For train dataloader (prefix "train" in logs name):
+
+            Print current epoch's values and plot values vs epochs for:
+
+                - losses tracked inside <do_train_func>.
+
+                - metrics.
+
+        For each validation dataloader
+            (prefix "val {dataloader_name}" in logs name):
+
+                Print current epoch's values and plot values vs epochs for:
+
+                    - metrics.
+
     Args:
 
         model (torch.nn.Module): a model to train on <train_dataloader>
@@ -269,7 +287,7 @@ def train_eval_loop(
         make_metric (Callable): a factory function used for making metrics.
 
         make_criterion (Callable): a factory function
-            used for making a criterion aka loss.
+            used for making a criterion that computes loss.
 
         make_optimizer (Callable): a factory function
             used for making an optimizer of the <model> weights.
@@ -277,10 +295,10 @@ def train_eval_loop(
         make_scheduler (Callable): a factory function
             used for making a scheduler for the <optimizer>'s learning rate.
 
-        do_train_func (Callable): arg for local function "run_epoch".
+        do_train_func (Callable): an argument for local function "run_epoch".
 
         random_seed (int): a random seed
-            used to init random number generator.
+            used to init a random number generator.
             Default: RANDOM_SEED
 
         stop_after_epoch (int): the number of the iteration
@@ -392,8 +410,13 @@ def eval_model_on_test(
     show_random_batch_with_predictions: bool = True
 ) -> None:
     """
-    Evaluate a model on given dataloaders, i.e. call local "run_epoch" function
+    Evaluate a model on given dataloaders, i.e. call local function "run_epoch"
     for the model on each of test dataloaders in an "eval" mode.
+
+    How does metrics logging happen:
+
+        For each test dataloader
+            (prefix "test {dataloader_name}" in logs name) print metrics values.
 
     Args:
 
@@ -401,12 +424,12 @@ def eval_model_on_test(
 
         test_dataloaders (Dict[str, torch.utils.data.DataLoader]): a dictionary
             that maps names of dataloaders on which the <model> is evaluated
-            to that very dataloaders .
+            to that very dataloaders.
 
         make_metric (Callable): a factory function for making metrics.
 
-        show_random_batch_with_predictions: arg
-            for the local function "run_epoch".
+        show_random_batch_with_predictions: an argument
+            for local function "run_epoch".
             Default: True
     """
     compute_metric = make_metric()

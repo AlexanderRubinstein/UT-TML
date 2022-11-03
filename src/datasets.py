@@ -847,8 +847,8 @@ def prepare_default_dsprites_dataloaders_maker(
 
     Args:
 
-        dsprites_holder_args (dict[str, Any]): keyword args
-            for local class method "DSpritesHolder.__init__()"
+        dsprites_holder_args (dict[str, Any]): keyword arguments
+            for local class method "DSpritesHolder.__init__"
             and cache_path keyword arg that does the same as <cache_path>
             for the current function.
             Default: DEFAULT_DSPRITES_HOLDER_ARGS
@@ -990,8 +990,8 @@ def prepare_de_biasing_task_dataloader_maker(
         prepared in local function "prepare_default_dsprites_dataloaders_maker".
 
         - "diag_and_off_diag_dataloader" is the one that generates tuples of:
-            - images
-            - "ground truth" labels
+            - images.
+            - "ground truth" labels.
             - "easy to bias" labels.
 
         Where the "ground truth" labels are the correct labels
@@ -1020,7 +1020,7 @@ def prepare_de_biasing_task_dataloader_maker(
             according to which "ground truth" labels are assigned.
             Default: GROUND_TRUTH_CUE
 
-        off_diag_proportion (float): a ratio: the number of "off-diagonal"
+        off_diag_proportion (float): the number of "off-diagonal" samples
             divided by the number of "diagonal" samples.
             Default: 0
 
@@ -1030,9 +1030,10 @@ def prepare_de_biasing_task_dataloader_maker(
             Default: None
 
         unlabelled_off_diag (bool): a flag, if it is True,
-            "off-diagonal" samples have ground truth labels,
-            otherwise their labels equal to the EMPTY_LABEL.
-            Default: True
+            "off-diagonal" ground truth labels
+            become equal to the EMPTY_LABEL.
+            If it is False ground truth labels stay unchanged.
+            Default: False
 
         equal_diag_off_diag_in_batch (bool): a flag if it is True,
             the number of "diagonal" samples in a batch is the same as

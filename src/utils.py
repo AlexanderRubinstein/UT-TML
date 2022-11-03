@@ -441,18 +441,18 @@ def show_dataloader_first_batch(
     label_names: List[str]
 ):
     """
-	Plots first batch of a dataloader
+    Plots first batch of a dataloader
     using local function "show_images_batch".
 
-	Args:
+    Args:
 
-		dataloader (torch.utils.data.DataLoader): a dataloader
+        dataloader (torch.utils.data.DataLoader): a dataloader
             which first batch is shown.
 
-		label_names (List[str]): list of names for each label.
-			For example, if a dataloader generates
+        label_names (List[str]): list of names for each label.
+            For example, if a dataloader generates
             tuple (input, List[label_0, ... label_k]),
-			label_names will be List[label_0_name, ..., label_k_name].
+            label_names will be List[label_0_name, ..., label_k_name].
     """
 
     images_batch, labels_batch = next(iter(dataloader))
